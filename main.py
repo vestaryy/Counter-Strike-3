@@ -25,27 +25,25 @@ class Game(arcade.Window):
         self.fps_counter = 0
         self.fps_timer = 0
         self.current_fps = 0
+        self.set_mouse_position(100, 600)
 
-        # Скрываем курсор мыши
-        # self.set_mouse_visible(False)
+        self.set_mouse_visible(False)
 
-        # Чувствительность мыши
-        self.mouse_sensitivity = 0.003  # Чувствительность мыши
 
     def setup(self):
         self.keys_pressed = set()
         self.ver_a = 0
-        self.angle = 0
-        self.x = SCREEN_WIDTH / 2
-        self.y = SCREEN_HEIGHT / 2
+        self.angle = 0.6
+        self.x = block_size + 50
+        self.y = block_size + 50
         self.block_size = 100
         self.text_map = [
             'WWWWWWWWWWWW',
             'W..........W',
-            'W..........W',
-            'W.........WW',
-            'W..........W',
-            'W..........W',
+            'W....W.....W',
+            'W....WWWW.WW',
+            'W....W.....W',
+            'W....WWWWWWW',
             'W..........W',
             'WWWWWWWWWWWW',
         ]
@@ -58,6 +56,9 @@ class Game(arcade.Window):
                     self.block_map.add((x_block_pos, y_block_pos))
                 x_block_pos += self.block_size
             y_block_pos += self.block_size
+
+        self.speed = 250
+
 
     def on_draw(self):
         """ Очистка окна """
@@ -110,10 +111,10 @@ class Game(arcade.Window):
                     arcade.rect.XYWH(ray * scale + scale / 2, (half_height) - self.ver_a, scale, h_c), color)
 
         # Точка с лучом
-        # arcade.draw_circle_filled(self.x, self.y, 10, (0, 255, 255))
-        # arcade.draw_line(self.x, self.y, SCREEN_WIDTH * cos(self.angle) + self.x,
-        #                  SCREEN_WIDTH * sin(self.angle) + self.y,
-        #                  (0, 255, 255))
+        arcade.draw_circle_filled(self.x, self.y, 10, (0, 255, 255))
+        arcade.draw_line(self.x, self.y, SCREEN_WIDTH * cos(self.angle) + self.x,
+                         SCREEN_WIDTH * sin(self.angle) + self.y,
+                         (0, 255, 255))
 
     def on_update(self, delta_time):
         if arcade.key.LSHIFT in self.keys_pressed:
@@ -127,17 +128,20 @@ class Game(arcade.Window):
             self.angle += delta_time * 1.5
 
         if arcade.key.W in self.keys_pressed:
-            self.x += cos(self.angle) * delta_time * 500
-            self.y += sin(self.angle) * delta_time * 500
+            self.x += cos(self.angle) * delta_time * self.speed
+            self.y += sin(self.angle) * delta_time * self.speed
         if arcade.key.S in self.keys_pressed:
-            self.x -= cos(self.angle) * delta_time * 500
-            self.y -= sin(self.angle) * delta_time * 500
+            self.x -= cos(self.angle) * delta_time * self.speed
+            self.y -= sin(self.angle) * delta_time * self.speed
         if arcade.key.A in self.keys_pressed:
-            self.x += sin(self.angle) * delta_time * 500
-            self.y -= cos(self.angle) * delta_time * 500
+            self.x += sin(self.angle) * delta_time * self.speed
+            self.y -= cos(self.angle) * delta_time * self.speed
         if arcade.key.D in self.keys_pressed:
-            self.x -= sin(self.angle) * delta_time * 500
-            self.y += cos(self.angle) * delta_time * 500
+            self.x -= sin(self.angle) * delta_time * self.speed
+            self.y += cos(self.angle) * delta_time * self.speed
+        if arcade.key.ESCAPE in self.keys_pressed:
+            quit()
+
 
         self.fps_counter += 1
         self.fps_timer += delta_time
@@ -148,19 +152,13 @@ class Game(arcade.Window):
             self.fps_counter = 0
             self.fps_timer = 0
             self.set_caption(f"{SCREEN_TITLE} - FPS: {self.current_fps}")
+        self.custom_mouse_motion(self._mouse_x, self._mouse_y, delta_time)
 
-    def on_mouse_motion(self, x: int, y: int, dx: int, dy: int):
-        """
-        Обработка движения мыши.
-        dx, dy - ИЗМЕНЕНИЕ позиции мыши с последнего вызова (относительное движение)
-        НЕ нужно возвращать мышь в центр!
-        """
-        # Изменяем угол в зависимости от горизонтального движения мыши
-        # dx - изменение по горизонтали с последнего кадра
-
-        self.angle += dx * self.mouse_sensitivity
-        self.set_mouse_position(800, 500)
-
+    def custom_mouse_motion(self, x, y, delta):
+        #if self._mouse_in_window:
+            d = x - SCREEN_WIDTH // 2
+            self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+            self.angle += d * delta * 0.1
         # d = x - SCREEN_WIDTH // 2
         # self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         # self.angle += x + dx * self.mouse_sensitivity
