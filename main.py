@@ -1,8 +1,14 @@
 import arcade
 from math import *
+import tkinter as tk
 
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 800
+root = tk.Tk()
+SCREEN_WIDTH = root.winfo_screenwidth()
+SCREEN_HEIGHT = root.winfo_screenheight()
+root.destroy()
+#
+# SCREEN_WIDTH = 1200
+# SCREEN_HEIGHT = 800
 SCREEN_TITLE = "CS 3"
 
 block_size = 100
@@ -21,11 +27,10 @@ dep_coeff = 2
 
 class Game(arcade.Window):
     def __init__(self, width, height, title):
-        super().__init__(width, height, title)
+        super().__init__(width, height, title, fullscreen=True)
         self.fps_counter = 0
         self.fps_timer = 0
         self.current_fps = 0
-        self.set_mouse_position(100, 600)
 
         self.set_mouse_visible(False)
 
@@ -111,21 +116,22 @@ class Game(arcade.Window):
                     arcade.rect.XYWH(ray * scale + scale / 2, (half_height) - self.ver_a, scale, h_c), color)
 
         # Точка с лучом
-        arcade.draw_circle_filled(self.x, self.y, 10, (0, 255, 255))
-        arcade.draw_line(self.x, self.y, SCREEN_WIDTH * cos(self.angle) + self.x,
-                         SCREEN_WIDTH * sin(self.angle) + self.y,
-                         (0, 255, 255))
+        # arcade.draw_circle_filled(self.x, self.y, 10, (0, 255, 255))
+        # arcade.draw_line(self.x, self.y, SCREEN_WIDTH * cos(self.angle) + self.x,
+        #                  SCREEN_WIDTH * sin(self.angle) + self.y,
+        #                  (0, 255, 255))
+        arcade.draw_circle_filled(self.size[0] / 2, self.size[1] / 2, 5, (255, 0, 0))
 
     def on_update(self, delta_time):
-        if arcade.key.LSHIFT in self.keys_pressed:
-            self.ver_a -= 150 * delta_time * 10
-        if arcade.key.LCTRL in self.keys_pressed:
-            self.ver_a += 150 * delta_time * 10
-
-        if arcade.MOUSE_BUTTON_LEFT in self.keys_pressed:
-            self.angle -= delta_time * 1.5
-        if arcade.MOUSE_BUTTON_RIGHT in self.keys_pressed:
-            self.angle += delta_time * 1.5
+    #     if arcade.key.LSHIFT in self.keys_pressed:
+    #         self.ver_a -= 150 * delta_time * 10
+    #     if arcade.key.LCTRL in self.keys_pressed:
+    #         self.ver_a += 150 * delta_time * 10
+    #
+    #     if arcade.MOUSE_BUTTON_LEFT in self.keys_pressed:
+    #         self.angle -= delta_time * 1.5
+    #     if arcade.MOUSE_BUTTON_RIGHT in self.keys_pressed:
+    #         self.angle += delta_time * 1.5
 
         if arcade.key.W in self.keys_pressed:
             self.x += cos(self.angle) * delta_time * self.speed
@@ -155,12 +161,22 @@ class Game(arcade.Window):
         self.custom_mouse_motion(self._mouse_x, self._mouse_y, delta_time)
 
     def custom_mouse_motion(self, x, y, delta):
-        #if self._mouse_in_window:
-            d = x - SCREEN_WIDTH // 2
-            self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            self.angle += d * delta * 0.1
-        # d = x - SCREEN_WIDTH // 2
-        # self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        dx = x - SCREEN_WIDTH // 2
+
+        self.angle += dx * delta * 0.1
+        if self.ver_a < -3000:
+            self.ver_a = -70
+        dy = y - SCREEN_HEIGHT // 2
+        if dy > 0:
+            if 800 > self.ver_a + dy * delta * 50:
+                self.ver_a += dy * delta * 50
+        if dy < 0:
+            if self.ver_a + dy * delta * 50 > -800:
+                self.ver_a += dy * delta * 50
+        self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+
+    # d = x - SCREEN_WIDTH // 2
+    # self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         # self.angle += x + dx * self.mouse_sensitivity
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
