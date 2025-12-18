@@ -191,14 +191,14 @@ class Game(arcade.Window):
         dx = x - SCREEN_WIDTH // 2
 
         self.angle += dx * delta * 0.1
-        if self.ver_a < -3000:
+        if self.ver_a < -SCREEN_HEIGHT:
             self.ver_a = -70
         dy = y - SCREEN_HEIGHT // 2
         if dy > 0:
-            if 800 > self.ver_a + dy * delta * 50:
+            if SCREEN_HEIGHT > self.ver_a + dy * delta * 50:
                 self.ver_a += dy * delta * 50
         if dy < 0:
-            if self.ver_a + dy * delta * 50 > -800:
+            if self.ver_a + dy * delta * 50 > -SCREEN_HEIGHT:
                 self.ver_a += dy * delta * 50
         self.set_mouse_position(self.size[0] // 2, self.size[1] // 2)
 
