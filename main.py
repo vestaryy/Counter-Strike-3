@@ -121,9 +121,8 @@ class Game(arcade.Window):
         arcade.draw_circle_filled(self.size[0] / 2, self.size[1] / 2, 5, (255, 0, 0))
 
     def can_move_to(self, x, y):
-        points_to_check = 8
-        for i in range(points_to_check):
-            a = 2 * pi * i / points_to_check
+        for i in range(8):
+            a = 2 * pi * i / 8
             check_x = x + 10 * cos(a)
             check_y = y + 10 * sin(a)
 
