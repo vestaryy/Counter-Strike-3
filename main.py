@@ -2,13 +2,13 @@ import arcade
 from math import *
 import tkinter as tk
 
-root = tk.Tk()
-SCREEN_WIDTH = root.winfo_screenwidth()
-SCREEN_HEIGHT = root.winfo_screenheight()
-root.destroy()
-#
-# SCREEN_WIDTH = 1200
-# SCREEN_HEIGHT = 800
+# root = tk.Tk()
+# SCREEN_WIDTH = root.winfo_screenwidth()
+# SCREEN_HEIGHT = root.winfo_screenheight()
+# root.destroy()
+
+SCREEN_WIDTH = 1500
+SCREEN_HEIGHT = 800
 SCREEN_TITLE = "CS 3"
 
 block_size = 100
@@ -27,13 +27,12 @@ dep_coeff = 2
 
 class Game(arcade.Window):
     def __init__(self, width, height, title):
-        super().__init__(width, height, title, fullscreen=True)
+        super().__init__(width, height, title, fullscreen=False)
         self.fps_counter = 0
         self.fps_timer = 0
         self.current_fps = 0
 
         self.set_mouse_visible(False)
-
 
     def setup(self):
         self.keys_pressed = set()
@@ -62,8 +61,7 @@ class Game(arcade.Window):
                 x_block_pos += self.block_size
             y_block_pos += self.block_size
 
-        self.speed = 250
-
+        self.speed = 100
 
     def on_draw(self):
         """ Очистка окна """
@@ -122,43 +120,73 @@ class Game(arcade.Window):
         #                  (0, 255, 255))
         arcade.draw_circle_filled(self.size[0] / 2, self.size[1] / 2, 5, (255, 0, 0))
 
+    def can_move_to(self, x, y):
+        points_to_check = 8
+        for i in range(points_to_check):
+            a = 2 * pi * i / points_to_check
+            check_x = x + 10 * cos(a)
+            check_y = y + 10 * sin(a)
+
+            if (check_x // self.block_size * self.block_size,
+                check_y // self.block_size * self.block_size) in self.block_map:
+                return False
+
+        return True
+
     def on_update(self, delta_time):
-    #     if arcade.key.LSHIFT in self.keys_pressed:
-    #         self.ver_a -= 150 * delta_time * 10
-    #     if arcade.key.LCTRL in self.keys_pressed:
-    #         self.ver_a += 150 * delta_time * 10
-    #
-    #     if arcade.MOUSE_BUTTON_LEFT in self.keys_pressed:
-    #         self.angle -= delta_time * 1.5
-    #     if arcade.MOUSE_BUTTON_RIGHT in self.keys_pressed:
-    #         self.angle += delta_time * 1.5
+        if arcade.key.F1 in self.keys_pressed:
+            self.set_mouse_visible(not self._mouse_visible)
+
+        dx, dy = 0, 0
+
+        if arcade.key.LSHIFT in self.keys_pressed:
+            self.speed = 250
+        else:
+            self.speed = 100
 
         if arcade.key.W in self.keys_pressed:
-            self.x += cos(self.angle) * delta_time * self.speed
-            self.y += sin(self.angle) * delta_time * self.speed
+            dx += cos(self.angle) * delta_time * self.speed
+            dy += sin(self.angle) * delta_time * self.speed
+
         if arcade.key.S in self.keys_pressed:
-            self.x -= cos(self.angle) * delta_time * self.speed
-            self.y -= sin(self.angle) * delta_time * self.speed
+            dx -= cos(self.angle) * delta_time * self.speed
+            dy -= sin(self.angle) * delta_time * self.speed
+
         if arcade.key.A in self.keys_pressed:
-            self.x += sin(self.angle) * delta_time * self.speed
-            self.y -= cos(self.angle) * delta_time * self.speed
+            dx += sin(self.angle) * delta_time * self.speed
+            dy -= cos(self.angle) * delta_time * self.speed
+
         if arcade.key.D in self.keys_pressed:
-            self.x -= sin(self.angle) * delta_time * self.speed
-            self.y += cos(self.angle) * delta_time * self.speed
+            dx -= sin(self.angle) * delta_time * self.speed
+            dy += cos(self.angle) * delta_time * self.speed
+
+        if dx != 0:
+            if self.can_move_to(self.x + dx, self.y):
+                self.x = self.x + dx
+            else:
+                if self.can_move_to(self.x + dx * 0.3, self.y):
+                    self.x = self.x + dx * 0.3
+
+        if dy != 0:
+            if self.can_move_to(self.x, self.y + dy):
+                self.y = self.y + dy
+            else:
+                if self.can_move_to(self.x, self.y + dy * 0.3):
+                    self.y = self.y + dy * 0.3
+
         if arcade.key.ESCAPE in self.keys_pressed:
             quit()
-
 
         self.fps_counter += 1
         self.fps_timer += delta_time
 
-        # Обновляем FPS каждую секунду
         if self.fps_timer >= 1.0:
             self.current_fps = self.fps_counter
             self.fps_counter = 0
             self.fps_timer = 0
             self.set_caption(f"{SCREEN_TITLE} - FPS: {self.current_fps}")
-        self.custom_mouse_motion(self._mouse_x, self._mouse_y, delta_time)
+        if not self._mouse_visible:
+            self.custom_mouse_motion(self._mouse_x, self._mouse_y, delta_time)
 
     def custom_mouse_motion(self, x, y, delta):
         dx = x - SCREEN_WIDTH // 2
@@ -173,11 +201,11 @@ class Game(arcade.Window):
         if dy < 0:
             if self.ver_a + dy * delta * 50 > -800:
                 self.ver_a += dy * delta * 50
-        self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        self.set_mouse_position(self.size[0] // 2, self.size[1] // 2)
 
     # d = x - SCREEN_WIDTH // 2
     # self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        # self.angle += x + dx * self.mouse_sensitivity
+    # self.angle += x + dx * self.mouse_sensitivity
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
         """ Обработка нажатий кнопок мыши """
@@ -188,9 +216,12 @@ class Game(arcade.Window):
         if button in self.keys_pressed:
             self.keys_pressed.remove(button)
 
+
     def on_key_press(self, key, modifiers):
         """ Обработка нажатий клавиш """
         self.keys_pressed.add(key)
+
+
 
     def on_key_release(self, key, modifiers):
         """ Обработка отпускания клавиш """
