@@ -81,7 +81,7 @@ class Game(arcade.Window):
             cur_angle = self.angle - half_FOV + delta_ray * ray
             cos_a, sin_a = cos(cur_angle), sin(cur_angle)
             vd, hd = 0, 0
-            founded = False
+            f = False
             for dep in range(max_depth):
                 if cos_a > 0:
                     vd = in_block_pos['right'] / cos_a + self.block_size / cos_a * dep + 1
@@ -90,7 +90,7 @@ class Game(arcade.Window):
                 x, y = vd * cos_a + self.x, vd * sin_a + self.y
                 fix_x, fix_y = x // self.block_size * self.block_size, y // self.block_size * self.block_size
                 if (fix_x, fix_y) in self.block_map:
-                    founded = True
+                    f = True
                     break
 
             for dep in range(max_depth):
@@ -101,10 +101,10 @@ class Game(arcade.Window):
                 x, y = hd * cos_a + self.x, hd * sin_a + self.y
                 fix_x, fix_y = x // self.block_size * self.block_size, y // self.block_size * self.block_size
                 if (fix_x, fix_y) in self.block_map:
-                    founded = True
+                    f = True
                     break
 
-            if founded:
+            if f:
                 ray_size = min(vd, hd) * dep_coeff
                 ray_size *= cos(self.angle - cur_angle)
                 h_c = coefficent / (ray_size + 0.0001)
