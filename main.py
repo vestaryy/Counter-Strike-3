@@ -1,33 +1,77 @@
 import arcade
 from math import *
-import tkinter as tk
 
-# root = tk.Tk()
-# SCREEN_WIDTH = root.winfo_screenwidth()
-# SCREEN_HEIGHT = root.winfo_screenheight()
-# root.destroy()
+from arcade import SpriteList
 
-SCREEN_WIDTH = 1500
-SCREEN_HEIGHT = 800
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 700
 SCREEN_TITLE = "CS 3"
 
 block_size = 100
 FOV = pi / 2
 half_FOV = FOV / 2
 max_depth = SCREEN_WIDTH // 100
-num_rays = 300
+num_rays = 600
 delta_ray = FOV / (num_rays - 1)
 ray_size = SCREEN_WIDTH
 dist = num_rays / (2 * tan(half_FOV))
 scale = SCREEN_WIDTH // num_rays
-coefficent = dist * 100 * scale
+coefficent = dist * 150 * scale
 half_height = SCREEN_HEIGHT / 2
 dep_coeff = 2
+
+class AK_47(arcade.BasicSprite):
+    def __init__(self, path=arcade.load_texture('textures/ak-47.png'), scale=1.3):
+        path.width *= 1.5
+        super().__init__(path, scale)
+        self.defoult_texture = path
+        self.shoot_texture = arcade.load_texture('textures/ak-47_shoot.png')
+        self.shoot_texture.width *= 1.5
+        self.bottom = 0
+        self.right = SCREEN_WIDTH
+        self.shoot_timer = 0
+        self.shoot_delay = 0.2
+        self.active = []
+        self.shoot_sound = arcade.load_sound('sounds/ak47_shoot.mp3')
+        self.shooting = False
+        self.speed = 100
+
+
+    def update(self, delta_time: float = 1 / 60, *args, **kwargs) -> None:
+        if self.shooting:
+            if self.shoot_timer >= self.shoot_delay or self.shoot_timer == 0:
+                self.shoot_sound.play(volume=0.05)
+                self.texture = self.shoot_texture
+                self.right += self.speed * delta_time
+                self.bottom -= self.speed * delta_time
+                self.shoot_timer = 0
+            else:
+                self.texture = self.defoult_texture
+            self.shoot_timer += delta_time
+
+        elif self.bottom < 0 and self.right > SCREEN_WIDTH:
+            self.right -= self.speed * delta_time * 2
+            self.bottom += self.speed * delta_time * 2
+        else:
+            self.bottom = 0
+            self.right = SCREEN_WIDTH
+
+        if self.texture == self.shoot_texture and not self.shooting:
+            self.texture = self.defoult_texture
+class StartWindow(arcade.Window):
+    def __init__(self, w, h, t):
+        super().__init__(w, h, t)
+
+    def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
+        self.close()
+        game = Game(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+        game.setup()
+        game.run()
 
 
 class Game(arcade.Window):
     def __init__(self, width, height, title):
-        super().__init__(width, height, title, fullscreen=False)
+        super().__init__(width, height, title)
         self.fps_counter = 0
         self.fps_timer = 0
         self.current_fps = 0
@@ -35,90 +79,140 @@ class Game(arcade.Window):
         self.set_mouse_visible(False)
 
     def setup(self):
-        self.keys_pressed = set()
-        self.ver_a = 0
-        self.angle = 0.6
-        self.x = block_size + 50
-        self.y = block_size + 50
+        self.textures = {'W': arcade.load_texture('textures/wall_squares.jpg'), 'L': arcade.load_texture('textures/soviet_wall.jpg')}
+        self.wall_batch = SpriteList()
+        self.texture_slices = {}
+        for let, texture in self.textures.items():
+            self.texture_slices[let] = []
+            for x in range(block_size):
+                self.texture_slices[let].append(texture.crop(x * (texture.width // block_size), 0, 1, texture.height))
+        self.player = Player()
         self.block_size = 100
         self.text_map = [
             'WWWWWWWWWWWW',
             'W..........W',
             'W....W.....W',
-            'W....WWWW.WW',
+            'W....WLLL.WW',
             'W....W.....W',
-            'W....WWWWWWW',
+            'W....WWWW.WW',
             'W..........W',
             'WWWWWWWWWWWW',
         ]
+        self.map_width, self.map_height = len(self.text_map[0]), len(self.text_map)
+        self.block_map_textures = {}
         self.block_map = set()
-        y_block_pos = 0
+        ybp = 0
         for row in self.text_map:
-            x_block_pos = 0
-            for column in list(row):
-                if column == 'W':
-                    self.block_map.add((x_block_pos, y_block_pos))
-                x_block_pos += self.block_size
-            y_block_pos += self.block_size
+            xbp = 0
+            for col in list(row):
+                if col != '.':
+                    self.block_map.add((xbp, ybp))
+                    self.block_map_textures[(xbp, ybp)] = col
+                xbp += self.block_size
+            ybp += self.block_size
 
-        self.speed = 100
+
+        self.kalash = AK_47()
+        self.kalash_list = SpriteList()
+        self.kalash_list.append(self.kalash)
+
+        self.sky_texture = arcade.load_texture('textures/sky_ala.jpg')
+        self.sky_offset = 0
+
+
 
     def on_draw(self):
         """ Очистка окна """
         self.clear()
-        arcade.draw_rect_filled(arcade.rect.LBWH(0, half_height - self.ver_a, SCREEN_WIDTH, half_height + self.ver_a),
-                                arcade.color.SKY_BLUE)
-        arcade.draw_rect_filled(arcade.rect.LBWH(0, 0, SCREEN_WIDTH, half_height - self.ver_a), arcade.color.JET)
-        # for x, y in self.block_map:
-        #     arcade.draw_rect_outline(arcade.rect.LBWH(x, y, self.block_size, self.block_size), arcade.color.GRAY)
+        self.wall_batch.clear()
+        def draw_sky():
+            sky_h = SCREEN_HEIGHT
+            sky_w = SCREEN_WIDTH
+            arcade.draw_texture_rect(
+                self.sky_texture,
+                rect=arcade.LBWH(-self.sky_offset, -self.player.ver_a, sky_w, sky_h)        )
+            arcade.draw_texture_rect(
+                self.sky_texture,
+                rect=arcade.LBWH(-self.sky_offset + SCREEN_WIDTH, -self.player.ver_a , sky_w, sky_h)
+            )
+            arcade.draw_texture_rect(
+                self.sky_texture,
+                rect=arcade.LBWH(-self.sky_offset, -self.player.ver_a + SCREEN_HEIGHT, sky_w, sky_h))
+            arcade.draw_texture_rect(
+                self.sky_texture,
+                rect=arcade.LBWH(-self.sky_offset + SCREEN_WIDTH, -self.player.ver_a + SCREEN_HEIGHT, sky_w, sky_h)
+            )
+        def draw_floor():
+            arcade.draw_rect_filled(arcade.rect.LBWH(0, 0, SCREEN_WIDTH, half_height - self.player.ver_a), arcade.color.JET)
 
-        in_block_pos = {'left': self.x - self.x // self.block_size * self.block_size,
-                        'top': self.y - self.y // self.block_size * self.block_size,
-                        'right': self.block_size - (self.x - self.x // self.block_size * self.block_size),
-                        'bottom': self.block_size - (self.y - self.y // self.block_size * self.block_size)
+        dict_block_pos = {'l': self.player.x - self.player.x // self.block_size * self.block_size,
+                        't': self.player.y - self.player.y // self.block_size * self.block_size,
+                        'r': self.block_size - (self.player.x - self.player.x // self.block_size * self.block_size),
+                        'b': self.block_size - (self.player.y - self.player.y // self.block_size * self.block_size)
                         }
         for ray in range(num_rays):
-            cur_angle = self.angle - half_FOV + delta_ray * ray
-            cos_a, sin_a = cos(cur_angle), sin(cur_angle)
+            cos_a, sin_a = cos(self.player.angle - half_FOV + delta_ray * ray), sin(self.player.angle - half_FOV + delta_ray * ray)
             vd, hd = 0, 0
-            f = False
-            for dep in range(max_depth):
+            texture_v, texture_h = 0, 0
+            for dep in range(self.map_width):
                 if cos_a > 0:
-                    vd = in_block_pos['right'] / cos_a + self.block_size / cos_a * dep + 1
+                    vd = self.block_size / cos_a * dep + dict_block_pos['r'] / cos_a
+                    vd += 1
                 elif cos_a < 0:
-                    vd = in_block_pos['left'] / -cos_a + self.block_size / -cos_a * dep + 1
-                x, y = vd * cos_a + self.x, vd * sin_a + self.y
-                fix_x, fix_y = x // self.block_size * self.block_size, y // self.block_size * self.block_size
-                if (fix_x, fix_y) in self.block_map:
-                    f = True
+                    vd = self.block_size / -cos_a * dep + dict_block_pos['l'] / -cos_a
+                    vd += 1
+                xv, yv = vd * cos_a + self.player.x, vd * sin_a + self.player.y
+                fix = xv // self.block_size * self.block_size, yv // self.block_size * self.block_size
+                if fix in self.block_map:
+                    texture_v = self.block_map_textures[fix]
                     break
 
-            for dep in range(max_depth):
+            for dep in range(self.map_height):
                 if sin_a > 0:
-                    hd = in_block_pos['bottom'] / sin_a + self.block_size / sin_a * dep + 1
+                    hd = self.block_size / sin_a * dep + dict_block_pos['b'] / sin_a
+                    hd += 1
                 elif sin_a < 0:
-                    hd = in_block_pos['top'] / -sin_a + self.block_size / -sin_a * dep + 1
-                x, y = hd * cos_a + self.x, hd * sin_a + self.y
-                fix_x, fix_y = x // self.block_size * self.block_size, y // self.block_size * self.block_size
-                if (fix_x, fix_y) in self.block_map:
-                    f = True
+                    hd = self.block_size / -sin_a * dep +  dict_block_pos['t'] / -sin_a
+                    hd += 1
+                xh, yh = hd * cos_a + self.player.x, hd * sin_a + self.player.y
+                fix = xh // self.block_size * self.block_size, yh // self.block_size * self.block_size
+                if fix in self.block_map:
+                    texture_h = self.block_map_textures[fix]
                     break
 
-            if f:
-                ray_size = min(vd, hd) * dep_coeff
-                ray_size *= cos(self.angle - cur_angle)
-                h_c = coefficent / (ray_size + 0.0001)
-                c = 255 / (ray_size ** 2 * 0.000001 + 1)
-                color = (c, c, c)
-                arcade.draw_rect_filled(
-                    arcade.rect.XYWH(ray * scale + scale / 2, (half_height) - self.ver_a, scale, h_c), color)
+            if hd > vd:
+                ray_size = vd
+                offset = int(yv) % self.block_size
+                text_let = texture_v
+            else:
+                ray_size = hd
+                offset = int(xh) % self.block_size
+                text_let = texture_h
 
-        # Точка с лучом
-        # arcade.draw_circle_filled(self.x, self.y, 10, (0, 255, 255))
-        # arcade.draw_line(self.x, self.y, SCREEN_WIDTH * cos(self.angle) + self.x,
-        #                  SCREEN_WIDTH * sin(self.angle) + self.y,
-        #                  (0, 255, 255))
-        arcade.draw_circle_filled(self.size[0] / 2, self.size[1] / 2, 5, (255, 0, 0))
+            if offset >= len(self.texture_slices[text_let]):
+                offset = len(self.texture_slices[text_let]) - 1
+            ray_size = ray_size * cos(self.player.angle - (self.player.angle - half_FOV + delta_ray * ray)) * dep_coeff / 1.5
+
+
+            wall = arcade.Sprite(self.texture_slices[text_let][offset], 1, ray * scale, half_height - self.player.ver_a)
+            wall.height = coefficent / (ray_size + 0.0001)
+            wall.width = scale
+
+            self.wall_batch.append(wall)
+
+        draw_sky()
+        draw_floor()
+        self.wall_batch.draw()
+
+
+        def hud():
+            arcade.draw_rect_filled(arcade.rect.LRBT(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT), (0, 0, 0, 64))
+            arcade.draw_circle_filled(self.player.aim_x, self.player.aim_y, 3, (255, 0, 0))
+            self.kalash_list.draw()
+
+        hud()
+
+
 
     def can_move_to(self, x, y):
         for i in range(8):
@@ -133,48 +227,53 @@ class Game(arcade.Window):
         return True
 
     def on_update(self, delta_time):
-        if arcade.key.F1 in self.keys_pressed:
-            self.set_mouse_visible(not self._mouse_visible)
-
         dx, dy = 0, 0
 
-        if arcade.key.LSHIFT in self.keys_pressed:
-            self.speed = 250
+        if arcade.key.LSHIFT in self.player.keys_pressed:
+            self.player.speed = 200
         else:
-            self.speed = 100
+            self.player.speed = 150
 
-        if arcade.key.W in self.keys_pressed:
-            dx += cos(self.angle) * delta_time * self.speed
-            dy += sin(self.angle) * delta_time * self.speed
+        if arcade.MOUSE_BUTTON_LEFT in self.player.keys_pressed:
+            self.kalash.shooting = True
+            self.player.speed = 100
+        elif self.kalash.shooting:
+            self.kalash.shooting = False
+            self.player.speed = 150
 
-        if arcade.key.S in self.keys_pressed:
-            dx -= cos(self.angle) * delta_time * self.speed
-            dy -= sin(self.angle) * delta_time * self.speed
+        if arcade.key.W in self.player.keys_pressed:
+            dx += cos(self.player.angle) * delta_time * self.player.speed
+            dy += sin(self.player.angle) * delta_time * self.player.speed
 
-        if arcade.key.A in self.keys_pressed:
-            dx += sin(self.angle) * delta_time * self.speed
-            dy -= cos(self.angle) * delta_time * self.speed
+        if arcade.key.S in self.player.keys_pressed:
+            dx -= cos(self.player.angle) * delta_time * self.player.speed
+            dy -= sin(self.player.angle) * delta_time * self.player.speed
 
-        if arcade.key.D in self.keys_pressed:
-            dx -= sin(self.angle) * delta_time * self.speed
-            dy += cos(self.angle) * delta_time * self.speed
+        if arcade.key.A in self.player.keys_pressed:
+            dx += sin(self.player.angle) * delta_time * self.player.speed
+            dy -= cos(self.player.angle) * delta_time * self.player.speed
+
+        if arcade.key.D in self.player.keys_pressed:
+            dx -= sin(self.player.angle) * delta_time * self.player.speed
+            dy += cos(self.player.angle) * delta_time * self.player.speed
 
         if dx != 0:
-            if self.can_move_to(self.x + dx, self.y):
-                self.x = self.x + dx
-            else:
-                if self.can_move_to(self.x + dx * 0.3, self.y):
-                    self.x = self.x + dx * 0.3
+            if self.can_move_to(self.player.x + dx, self.player.y):
+                self.player.x = self.player.x + dx
+            elif self.can_move_to(self.player.x + dx * 0.3, self.player.y):
+                 self.player.x = self.player.x + dx * 0.3
+
+
 
         if dy != 0:
-            if self.can_move_to(self.x, self.y + dy):
-                self.y = self.y + dy
+            if self.can_move_to(self.player.x, self.player.y + dy):
+                self.player.y = self.player.y + dy
             else:
-                if self.can_move_to(self.x, self.y + dy * 0.3):
-                    self.y = self.y + dy * 0.3
+                if self.can_move_to(self.player.x, self.player.y + dy * 0.3):
+                    self.player.y = self.player.y + dy * 0.3
 
-        if arcade.key.ESCAPE in self.keys_pressed:
-            quit()
+        if arcade.key.ESCAPE in self.player.keys_pressed:
+            self.close()
 
         self.fps_counter += 1
         self.fps_timer += delta_time
@@ -183,54 +282,73 @@ class Game(arcade.Window):
             self.current_fps = self.fps_counter
             self.fps_counter = 0
             self.fps_timer = 0
-            self.set_caption(f"{SCREEN_TITLE} - FPS: {self.current_fps}")
+            self.set_caption(f"{SCREEN_TITLE}  FPS: {self.current_fps}")
         if not self._mouse_visible:
             self.custom_mouse_motion(self._mouse_x, self._mouse_y, delta_time)
 
+
+        self.kalash.update(delta_time)
+
     def custom_mouse_motion(self, x, y, delta):
         dx = x - SCREEN_WIDTH // 2
-
-        self.angle += dx * delta * 0.1
-        if self.ver_a < -SCREEN_HEIGHT:
-            self.ver_a = -70
+        self.sky_offset = (self.sky_offset + dx * delta * 50) % SCREEN_WIDTH
+        self.player.angle += dx * delta * 0.1
+        if self.player.ver_a < -SCREEN_HEIGHT:
+            self.player.ver_a = -70
         dy = y - SCREEN_HEIGHT // 2
         if dy > 0:
-            if SCREEN_HEIGHT > self.ver_a + dy * delta * 50:
-                self.ver_a += dy * delta * 50
+            if SCREEN_HEIGHT > self.player.ver_a + dy * delta * 50:
+                self.player.ver_a += dy * delta * 50
         if dy < 0:
-            if self.ver_a + dy * delta * 50 > -SCREEN_HEIGHT:
-                self.ver_a += dy * delta * 50
-        self.set_mouse_position(self.size[0] // 2, self.size[1] // 2)
+            if self.player.ver_a + dy * delta * 50 > -SCREEN_HEIGHT:
+                self.player.ver_a += dy * delta * 50
+        self.set_mouse_position(self.player.aim_x, self.player.aim_y)
 
-    # d = x - SCREEN_WIDTH // 2
-    # self.set_mouse_position(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-    # self.angle += x + dx * self.mouse_sensitivity
 
     def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
         """ Обработка нажатий кнопок мыши """
-        self.keys_pressed.add(button)
+        self.player.keys_pressed.add(button)
+
 
     def on_mouse_release(self, x: int, y: int, button: int, modifiers: int):
         """ Обработка отпускания кнопок мыши """
-        if button in self.keys_pressed:
-            self.keys_pressed.remove(button)
+        if button in self.player.keys_pressed:
+            self.player.keys_pressed.remove(button)
+        if button == arcade.MOUSE_BUTTON_LEFT:
+            self.kalash.shoot_timer = 0
 
 
     def on_key_press(self, key, modifiers):
         """ Обработка нажатий клавиш """
-        self.keys_pressed.add(key)
+        self.player.keys_pressed.add(key)
+        if arcade.key.F1 == key:
+            self.set_mouse_visible(not self._mouse_visible)
 
 
 
     def on_key_release(self, key, modifiers):
         """ Обработка отпускания клавиш """
-        if key in self.keys_pressed:
-            self.keys_pressed.remove(key)
+        if key in self.player.keys_pressed:
+            self.player.keys_pressed.remove(key)
+
+
+class Player:
+    def __init__(self):
+        self.x = block_size + 50
+        self.y = block_size + 50
+        self.keys_pressed = set()
+        self.ver_a = 0
+        self.angle = 0.6
+        self.aim_x = SCREEN_WIDTH // 2
+        self.aim_y = SCREEN_HEIGHT // 2
+        self.speed = 100
+
+
+
 
 
 def main():
-    game = Game(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-    game.setup()
+    StartWindow(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
     arcade.run()
 
 
