@@ -174,9 +174,9 @@ class Game(arcade.Window):
                 elif cos_a < 0:
                     vertical_d = self.block_size / -cos_a * dep + dict_block_pos['l'] / -cos_a + 1
                 xv, yv = vertical_d * cos_a + self.player.x, vertical_d * sin_a + self.player.y
-                fix = xv // self.block_size * self.block_size, yv // self.block_size * self.block_size
-                if fix in self.block_map:
-                    texture_v = self.map_textures[fix]
+                index = xv // self.block_size * self.block_size, yv // self.block_size * self.block_size
+                if index in self.block_map:
+                    texture_v = self.map_textures[index]
                     break
 
             for dep in range(self.map_height):
@@ -185,9 +185,9 @@ class Game(arcade.Window):
                 elif sin_a < 0:
                     horiz_d = self.block_size / -sin_a * dep + dict_block_pos['t'] / -sin_a + 1
                 xh, yh = horiz_d * cos_a + self.player.x, horiz_d * sin_a + self.player.y
-                fix = xh // self.block_size * self.block_size, yh // self.block_size * self.block_size
-                if fix in self.block_map:
-                    texture_h = self.map_textures[fix]
+                index = xh // self.block_size * self.block_size, yh // self.block_size * self.block_size
+                if index in self.block_map:
+                    texture_h = self.map_textures[index]
                     break
 
             if horiz_d > vertical_d:
