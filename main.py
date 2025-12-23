@@ -67,7 +67,7 @@ class AK_47(arcade.BasicSprite):
 
         if self.can_breath:
             self.center_x += sin(self.timer) * delta_time * 10
-            self.center_y -= sin(self.timer) * delta_time * 10
+            self.center_y -= sin(self.timer) * delta_time * 15
         
 
 class StartWindow(arcade.Window):
@@ -119,6 +119,7 @@ class Game(arcade.Window):
         self.map_width, self.map_height = len(self.text_map[0]), len(self.text_map)
         self.map_textures = {}
         self.block_map = set()
+
 
         self.radar = set()
         self.radar_scale = 5
@@ -228,19 +229,19 @@ class Game(arcade.Window):
         self.wall_batch.draw()
 
         def draw_radar():
-            arcade.draw_rect_filled(arcade.rect.XYWH(self.map_width * self.block_size // self.radar_scale // 2 + 10,
-                                                     SCREEN_HEIGHT - self.map_height * self.block_size // self.radar_scale // 2 - 10,
+            arcade.draw_rect_filled(arcade.rect.XYWH(self.map_width * self.block_size // self.radar_scale // 2,
+                                                     SCREEN_HEIGHT - self.map_height * self.block_size // self.radar_scale // 2,
                                                      self.map_width * self.block_size // self.radar_scale,
                                                      self.map_height * self.block_size // self.radar_scale),
                                                      arcade.color.GRAY)
-            map_x, map_y = (self.player.x // self.radar_scale + 10,
-                            SCREEN_HEIGHT - self.player.y // self.radar_scale - 10)
-            arcade.draw_circle_filled(map_x, map_y, self.radar_scale // 1.5, (0, 0, 255))
+            map_x, map_y = (self.player.x // self.radar_scale,
+                            SCREEN_HEIGHT - self.player.y // self.radar_scale)
+            arcade.draw_circle_filled(map_x, map_y, 4, (0, 0, 255))
             arcade.draw_line(map_x, map_y, map_x + 5 * cos(-self.player.angle), map_y + 5 * sin(-self.player.angle), (0, 0, 0))
             for x, y in self.radar:
                 arcade.draw_rect_filled(
-                    arcade.rect.LBWH(x + 10, SCREEN_HEIGHT - y - 30, self.block_size // self.radar_scale,
-                                     self.block_size // self.radar_scale), (0, 0, 0))
+                    arcade.rect.LBWH(x, SCREEN_HEIGHT - y - self.block_size // self.radar_scale, self.block_size // self.radar_scale,
+                                                                     self.block_size // self.radar_scale), (0, 0, 0))
 
         def hud():
             arcade.draw_rect_filled(arcade.rect.LRBT(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT), (0, 0, 0, 255 - max(0, min(255, round(127.5 * (cos(2 * pi * (self.times_of_day % 24 - 12) / 24) + 1))))))
