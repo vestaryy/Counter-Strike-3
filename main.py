@@ -35,7 +35,11 @@ class AK_47(arcade.BasicSprite):
         self.shooting = False
         self.speed = 100
 
+        self.timer = 0
+        self.can_breath = True
+
     def update(self, delta_time: float = 1 / 60, *args, **kwargs) -> None:
+        self.timer += delta_time
         if self.shooting:
             if self.shoot_timer >= self.shoot_delay or self.shoot_timer == 0:
                 self.shoot_sound.play(volume=0.05)
@@ -46,17 +50,25 @@ class AK_47(arcade.BasicSprite):
             else:
                 self.texture = self.defoult_texture
             self.shoot_timer += delta_time
+            self.can_breath = False
 
-        elif self.bottom < 0 and self.right > SCREEN_WIDTH:
+        elif self.bottom < 0 and self.right > SCREEN_WIDTH and not self.can_breath:
             self.right -= self.speed * delta_time * 2
             self.bottom += self.speed * delta_time * 2
-        else:
+
+        elif not self.can_breath:
             self.bottom = 0
             self.right = SCREEN_WIDTH
+            self.can_breath = True
+            self.timer = 0
 
         if self.texture == self.shoot_texture and not self.shooting:
             self.texture = self.defoult_texture
 
+        if self.can_breath:
+            self.center_x += sin(self.timer) * delta_time * 10
+            self.center_y -= sin(self.timer) * delta_time * 10
+        
 
 class StartWindow(arcade.Window):
     def __init__(self, w, h, t):
