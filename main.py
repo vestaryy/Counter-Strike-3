@@ -64,7 +64,7 @@ class StartWindow(arcade.Window):
         s, w = arcade.load_texture('textures/wall_squares.jpg'), arcade.load_texture('textures/soviet_wall.jpg')
 
 
-    def on_mouse_press(self, x: int, y: int, button: int, modifiers: int):
+    def on_key_press(self, key, modifiers):
         self.close()
         game = Game(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE, {'W': arcade.load_texture('textures/wall_squares.jpg'),
                                                                 'L': arcade.load_texture('textures/soviet_wall.jpg')})
@@ -224,6 +224,7 @@ class Game(arcade.Window):
             map_x, map_y = (self.player.x // self.radar_scale + 10,
                             SCREEN_HEIGHT - self.player.y // self.radar_scale - 10)
             arcade.draw_circle_filled(map_x, map_y, self.radar_scale // 1.5, (0, 0, 255))
+            arcade.draw_line(map_x, map_y, map_x + 5 * cos(-self.player.angle), map_y + 5 * sin(-self.player.angle), (0, 0, 0))
             for x, y in self.radar:
                 arcade.draw_rect_filled(
                     arcade.rect.LBWH(x + 10, SCREEN_HEIGHT - y - 30, self.block_size // self.radar_scale,
