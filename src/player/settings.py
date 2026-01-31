@@ -1,9 +1,9 @@
 import arcade
 from math import *
-SCREEN_WIDTH = int(arcade.get_screens()[0].width // 1.25)
-SCREEN_HEIGHT = int(arcade.get_screens()[0].height // 1.25)
+SCREEN_WIDTH = int(arcade.get_screens()[0].width // arcade.get_screens()[0].get_scale())
+SCREEN_HEIGHT = int(arcade.get_screens()[0].height // arcade.get_screens()[0].get_scale())
 SCREEN_TITLE = "CS 3"
-
+SCREEN_SCALE = arcade.get_screens()[0].get_scale()
 block_size = 100
 FOV = pi / 2
 half_FOV = FOV / 2
@@ -14,5 +14,5 @@ ray_size = SCREEN_WIDTH
 dist = num_rays / (2 * tan(half_FOV))
 scale = SCREEN_WIDTH // num_rays
 coefficent = dist * 150 * scale
-half_height = SCREEN_HEIGHT / 2
+half_height = SCREEN_HEIGHT // 2
 dep_coeff = 2

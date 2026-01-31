@@ -1,9 +1,5 @@
-from main import *
-from math import *
-from pathfinding import *
 from random import randint
-import arcade
-
+from src.player.settings import *
 TEXTURE_SLICES_CACHE = {}
 
 
@@ -12,16 +8,15 @@ class Enemies:
     def precompute_texture_slices_for_all_enemies(enemies_textures_dict):
         global TEXTURE_SLICES_CACHE
 
-        NUM_SLICES_WIDTH = 8
-        NUM_SLICES_OFFSET = 8
+        NUM_SLICES_WIDTH = 10
+        NUM_SLICES_OFFSET = 10
 
         TEXTURE_SLICES_CACHE = {}
 
         for enemy_type, textures_dict in enemies_textures_dict.items():
             for texture_name, texture_obj in textures_dict.items():
-                unique_key = f"{enemy_type}_{texture_name}"
 
-                TEXTURE_SLICES_CACHE[unique_key] = {}
+                TEXTURE_SLICES_CACHE[f"{enemy_type}_{texture_name}"] = {}
 
                 for width_idx in range(NUM_SLICES_WIDTH):
                     rel_width = 0.1 + 0.9 * (width_idx / max(1, NUM_SLICES_WIDTH - 1))
@@ -36,16 +31,32 @@ class Enemies:
                         cache_key = f"{start_x}_{slice_width}"
 
                         cropped_texture = texture_obj.crop(start_x, 0, slice_width, texture_obj.height)
-                        TEXTURE_SLICES_CACHE[unique_key][cache_key] = cropped_texture
+                        TEXTURE_SLICES_CACHE[f"{enemy_type}_{texture_name}"][cache_key] = cropped_texture
 
         return TEXTURE_SLICES_CACHE
 
-    def __init__(self, game_window, enemy_type, dict_textures, pos=(5.5, 3.5), scale=1.0, floor_offset=0.5):
+    def __init__(self, game_window, enemy_type, dict_textures, pos, scale, floor_offset, cd, can_move, can_attack, respawn_after_die, delete_after_die, hp=100, death_duration=60, max_chase_distance=randint(7, 10) * block_size):
         self.game = game_window
+        self.delete_after_die = delete_after_die
+        self.has_patrons = True
         self.enemy_type = enemy_type
+        self.can_move = can_move
+        self.can_attack = can_attack
+        if 'shoot' not in dict_textures:
+            dict_textures['shoot'] = dict_textures['default']
+
         self.dict_textures = dict_textures
-        self.current_texture_name = 'defoult'
+        self.current_texture_name = 'default'
         self.current_texture = dict_textures[self.current_texture_name]
+
+        self.health = hp
+        self.hit_timer = 0
+        self.hit_duration = 0.2
+        self.is_hit = False
+
+        self.is_dead = False
+        self.death_timer = 0
+        self.death_duration = death_duration
 
         self.scale = scale
         self.floor_offset = floor_offset
@@ -54,7 +65,6 @@ class Enemies:
         self.x = pos[0] * block_size + block_size // 2
         self.y = pos[1] * block_size + block_size // 2
 
-        self.distance = 0
         self.screen_x = 0
         self.screen_y = 0
         self.proj_width = 0
@@ -82,8 +92,8 @@ class Enemies:
         self.path_update_interval = 0.5
 
         self.chasing = False
-        self.max_chase_distance = randint(7, 10) * block_size
-        self.min_chase_distance = randint(2, 6) * block_size
+        self.max_chase_distance = max_chase_distance
+        self.min_chase_distance = randint(2, 4) * block_size
 
         self.animation_timer = 0
         self.is_moving = False
@@ -101,12 +111,25 @@ class Enemies:
         self.last_position = (self.x, self.y)
         self.last_target_distance = float('inf')
 
+        self.sprite = arcade.Sprite()
+        self.sprite.texture = self.current_texture
+        self.sprite_list = arcade.SpriteList()
+        self.sprite_list.append(self.sprite)
+
+        self.attack_cooldown = cd
+        self.attack_timer = 0
+        self.is_attacking = False
+        self.attack_damage = 10
+        self.attack_duration = 0.3
+        self.attack_animation_timer = 0
+        self.attack_sound = arcade.load_sound('../../assets/sounds/guns/enemies12_shoot.wav')
+        self.respawn_after_die = respawn_after_die
+
     def set_pathfinding(self, pathfinding_system):
         self.pathfinding = pathfinding_system
 
     def get_texture_slice(self, texture_name, crop_x, crop_width):
-        texture_obj = self.dict_textures[texture_name]
-        texture_width = texture_obj.width
+        texture_width = self.dict_textures[texture_name].width
 
         abs_start_x = int(crop_x * texture_width)
         abs_slice_width = int(crop_width * texture_width)
@@ -114,12 +137,10 @@ class Enemies:
         abs_start_x = max(0, min(texture_width - 1, abs_start_x))
         abs_slice_width = max(1, min(texture_width - abs_start_x, abs_slice_width))
 
-        unique_key = f"{self.enemy_type}_{texture_name}"
-        slices_dict = TEXTURE_SLICES_CACHE.get(unique_key, {})
+        slices_dict = TEXTURE_SLICES_CACHE.get(f"{self.enemy_type}_{texture_name}", {})
 
-        cache_key = f"{abs_start_x}_{abs_slice_width}"
-        if cache_key in slices_dict:
-            return slices_dict[cache_key]
+        if f"{abs_start_x}_{abs_slice_width}" in slices_dict:
+            return slices_dict[f"{abs_start_x}_{abs_slice_width}"]
 
         best_key = None
         best_distance = float('inf')
@@ -127,9 +148,7 @@ class Enemies:
         for key in slices_dict.keys():
             cached_start_x, cached_slice_width = map(int, key.split('_'))
 
-            start_distance = abs(abs_start_x - cached_start_x)
-            width_distance = abs(abs_slice_width - cached_slice_width)
-            total_distance = start_distance * 0.3 + width_distance * 0.7
+            total_distance = abs(abs_start_x - cached_start_x) * 0.3 + abs(abs_slice_width - cached_slice_width) * 0.7
 
             if total_distance < best_distance:
                 best_distance = total_distance
@@ -138,15 +157,46 @@ class Enemies:
         if best_key and best_distance < 50:
             return slices_dict[best_key]
 
-        return texture_obj.crop(abs_start_x, 0, abs_slice_width, texture_obj.height)
+        return self.dict_textures[texture_name].crop(abs_start_x, 0, abs_slice_width, self.dict_textures[texture_name].height)
 
     def update_ai(self, delta_time):
+        if not self.game.player_moved:
+            return
+
+        if self.is_dead:
+            self.death_timer += delta_time
+            if self.death_timer >= self.death_duration:
+                if self in self.game.enemies and self.delete_after_die:
+                    self.game.enemies.remove(self)
+            return
+
+        if self.is_attacking and self.is_dead:
+            self.is_attacking = False
+            self.attack_animation_timer = 0
+
+        if self.attack_timer > 0:
+            self.attack_timer -= delta_time
+
+        if self.is_attacking:
+            self.attack_animation_timer += delta_time
+            if self.attack_animation_timer >= self.attack_duration:
+                self.is_attacking = False
+                self.attack_animation_timer = 0
+                if not self.chasing and not self.is_hit:
+                    self.current_texture_name = 'default'
+
+        if self.is_hit:
+            self.hit_timer += delta_time
+            if self.hit_timer >= self.hit_duration:
+                self.is_hit = False
+                if not self.chasing and not self.is_attacking:
+                    self.current_texture_name = 'default'
+                elif self.chasing:
+                    self.current_texture_name = 'walk1' if self.walk_phase == 0 else 'walk2'
+
         self.path_update_timer += delta_time
         self.animation_timer += delta_time
 
-        dx_to_player = self.game.player.x - self.x
-        dy_to_player = self.game.player.y - self.y
-        distance_to_player = sqrt(dx_to_player * dx_to_player + dy_to_player * dy_to_player)
 
         current_pos = (self.x, self.y)
         pos_change = sqrt((current_pos[0] - self.last_position[0]) ** 2 +
@@ -158,33 +208,44 @@ class Enemies:
             self.stuck_timer = 0
             self.last_position = current_pos
 
-        needs_path_update = (self.path_update_timer >= self.path_update_interval or
-                             self.target_cell is None or
-                             self.stuck_timer >= self.stuck_threshold)
+        if self.is_attacking:
+            return
 
-        if (distance_to_player < self.max_chase_distance and
-                distance_to_player > self.min_chase_distance):
+        if (self.distance_to_player <= self.min_chase_distance and
+                self.attack_timer <= 0 and
+                not self.is_hit and
+                not self.is_dead and
+                self.can_see_player() and self.can_attack):
+            self.attack_player()
+            return
+
+        if not self.can_move:
+            return
+
+        if (self.distance_to_player < self.max_chase_distance and
+                self.distance_to_player > self.min_chase_distance and
+                not self.is_hit and
+                self.can_see_player()):
 
             self.chasing = True
             self.is_moving = True
 
-            if needs_path_update and self.pathfinding:
+            if (self.path_update_timer >= self.path_update_interval or
+                self.target_cell is None or
+                self.stuck_timer >= self.stuck_threshold) and self.pathfinding:
                 self.update_path_to_player()
                 self.path_update_timer = 0
                 self.stuck_timer = 0
 
             self.follow_path(delta_time)
 
-            if self.animation_timer >= 0.2:
+            if not self.is_hit and not self.is_attacking and self.animation_timer >= 0.2:
                 self.walk_phase = (self.walk_phase + 1) % 2
-
-                #if 'walk1' in self.dict_textures and 'walk2' in self.dict_textures:
                 new_texture_name = 'walk1' if self.walk_phase == 0 else 'walk2'
 
                 if new_texture_name != self.current_texture_name:
                     self.current_texture_name = new_texture_name
                 self.animation_timer = 0
-
         else:
             self.chasing = False
             self.is_moving = False
@@ -193,21 +254,42 @@ class Enemies:
             self.velocity_y = 0
             self.stuck_timer = 0
 
-            if self.current_texture_name != 'defoult':
-                self.current_texture_name = 'defoult'
+            if not self.is_hit and not self.is_attacking and self.current_texture_name != 'default':
+                self.current_texture_name = 'default'
+
+
+    def can_see_player(self):
+        dx = self.game.player.x - self.x
+        dy = self.game.player.y - self.y
+
+        if self.distance_to_player == 0:
+            return True
+
+        dir_x = dx / self.distance_to_player
+        dir_y = dy / self.distance_to_player
+        steps = int(self.distance_to_player / 10)
+        for i in range(1, steps):
+            check_x = self.x + dir_x * i * 10
+            check_y = self.y + dir_y * i * 10
+
+            map_x = int(check_x // block_size) * block_size
+            map_y = int(check_y // block_size) * block_size
+
+            if (map_x, map_y) in self.game.block_map:
+                return False
+
+        return True
 
     def update_path_to_player(self):
-        if not self.pathfinding:
+        if not self.pathfinding or not self.can_move:
             return
 
-        current_cell = (int(self.x // block_size), int(self.y // block_size))
 
-        player_cell = (int(self.game.player.x // block_size),
-                       int(self.game.player.y // block_size))
 
-        self.target_cell = self.pathfinding.get_path(current_cell, player_cell)
+        self.target_cell = self.pathfinding.get_path((int(self.x // block_size), int(self.y // block_size)), (int(self.game.player.x // block_size),
+                       int(self.game.player.y // block_size)))
 
-        if self.target_cell == current_cell:
+        if self.target_cell == (int(self.x // block_size), int(self.y // block_size)):
             self.target_cell = None
         else:
             target_x = self.target_cell[0] * block_size + block_size // 2
@@ -215,14 +297,13 @@ class Enemies:
 
             dx = target_x - self.x
             dy = target_y - self.y
-            distance = sqrt(dx * dx + dy * dy)
 
-            if distance > 0:
-                self.velocity_x = dx / distance
-                self.velocity_y = dy / distance
+            if self.distance_to_player > 0:
+                self.velocity_x = dx / self.distance_to_player
+                self.velocity_y = dy / self.distance_to_player
 
     def follow_path(self, delta_time):
-        if not self.target_cell:
+        if not self.target_cell or not self.can_move:
             return
 
         target_x = self.target_cell[0] * block_size + block_size // 2
@@ -235,7 +316,6 @@ class Enemies:
         if distance_to_target < 10:
             self.update_path_to_player()
             return
-
 
         target_dx = dx_to_target / distance_to_target if distance_to_target > 0 else 0
         target_dy = dy_to_target / distance_to_target if distance_to_target > 0 else 0
@@ -259,9 +339,9 @@ class Enemies:
             self.stuck_timer = 0
 
     def try_avoid_obstacle(self, dx, dy, delta_time):
-        angles_to_try = [pi / 4, -pi / 4, pi / 2, -pi / 2, 3 * pi / 4, -3 * pi / 4]
+        angles = [pi / 4, -pi / 4, pi / 2, -pi / 2, 3 * pi / 4, -3 * pi / 4]
 
-        for angle in angles_to_try:
+        for angle in angles:
             new_dx = dx * cos(angle) - dy * sin(angle)
             new_dy = dx * sin(angle) + dy * cos(angle)
 
@@ -278,30 +358,32 @@ class Enemies:
                     break
 
     def update(self, delta_time):
-        self.update_ai(delta_time)
+
 
         dx = self.x - self.game.player.x
         dy = self.y - self.game.player.y
 
-        self.distance = sqrt(dx * dx + dy * dy)
+        self.distance_to_player = sqrt(dx ** 2 + dy ** 2)
+        self.update_ai(delta_time)
+        c = int(255 / (1 + self.distance_to_player ** 2 * self.game.light_coeff))
+        self.sprite.color = (max(0, c), max(0, c), max(0, c))
 
-        if self.distance < 10:
+        if self.distance_to_player < 10:
             self.visible = False
+            self.sprite.visible = False
             return
 
-        sprite_angle = atan2(dy, dx)
 
-        delta_angle = sprite_angle - self.game.player.angle
+        delta_angle = atan2(dy, dx) - self.game.player.angle
 
         while delta_angle > pi:
             delta_angle -= 2 * pi
         while delta_angle < -pi:
             delta_angle += 2 * pi
 
-        sprite_angular_width = atan2(self.sprite_radius, self.distance)
 
-        left_angle = sprite_angle - sprite_angular_width
-        right_angle = sprite_angle + sprite_angular_width
+        left_angle = atan2(dy, dx) -  atan2(self.sprite_radius, self.distance_to_player)
+        right_angle = atan2(dy, dx) +  atan2(self.sprite_radius, self.distance_to_player)
 
         left_delta = left_angle - self.game.player.angle
         right_delta = right_angle - self.game.player.angle
@@ -318,6 +400,7 @@ class Enemies:
 
         if right_ray_index < 0 or left_ray_index >= num_rays or left_ray_index > right_ray_index:
             self.visible = False
+            self.sprite.visible = False
             return
 
         self.left_clip = left_ray_index
@@ -328,6 +411,7 @@ class Enemies:
 
         if visible_left > visible_right:
             self.visible = False
+            self.sprite.visible = False
             return
 
         visible_segments = []
@@ -340,7 +424,7 @@ class Enemies:
 
             wall_dist = self.get_wall_distance_in_direction(ray_dir_x, ray_dir_y)
 
-            sprite_ray_dist = self.get_sprite_distance_for_ray(ray_idx, ray_angle)
+            sprite_ray_dist = self.distance_to_player * cos(atan2(self.y - self.game.player.y, self.x - self.game.player.x) - ray_angle)
 
             if sprite_ray_dist < wall_dist + 5:
                 if current_segment_start == -1:
@@ -355,6 +439,7 @@ class Enemies:
 
         if not visible_segments:
             self.visible = False
+            self.sprite.visible = False
             return
 
         largest_segment = max(visible_segments, key=lambda seg: seg[1] - seg[0])
@@ -372,42 +457,114 @@ class Enemies:
             self.texture_crop_x = 0
             self.texture_crop_width = 1
 
-        current_crop_params = f"{self.texture_crop_x:.3f}_{self.texture_crop_width:.3f}_{self.current_texture_name}"
+        if self.is_attacking:
+            texture_to_use = 'shoot'
+        else:
+            texture_to_use = self.current_texture_name
 
-        if (self.last_crop_params != current_crop_params or
+
+        if (self.last_crop_params != f"{self.texture_crop_x:.3f}_{self.texture_crop_width:.3f}_{texture_to_use}" or
                 self.cropped_texture_cache is None):
 
             self.current_texture = self.get_texture_slice(
-                self.current_texture_name,
+                texture_to_use,
                 self.texture_crop_x,
                 self.texture_crop_width
             )
 
-            self.last_crop_params = current_crop_params
+            self.last_crop_params = f"{self.texture_crop_x:.3f}_{self.texture_crop_width:.3f}_{texture_to_use}"
             self.cropped_texture_cache = self.current_texture
         else:
             self.current_texture = self.cropped_texture_cache
 
-        self.corrected_distance = self.distance * cos(delta_angle)
+        self.corrected_distance = self.distance_to_player * cos(delta_angle)
         self.ray_index = self.visible_left + self.visible_width // 2
 
-        self.proj_height = coefficent / (self.corrected_distance + 0.0001) * self.scale
+        current_scale = self.scale
+        if self.is_dead:
+            current_scale = 0.2
 
+        self.proj_height = coefficent / (self.corrected_distance + 0.0001) * current_scale
         texture_ratio = self.current_texture.width / self.current_texture.height
         self.proj_width = self.proj_height * texture_ratio
 
-        base_y = half_height - self.game.player.ver_a
-        self.screen_y = base_y - self.proj_height * self.floor_offset
+
+        current_floor_offset = self.floor_offset
+        if self.is_dead:
+            current_floor_offset = 2
+        self.screen_y = half_height - self.game.player.ver_a - self.proj_height * current_floor_offset
         self.screen_x = self.visible_left * scale
 
         self.visible = True
 
+        self.sprite.texture = self.current_texture
+        self.sprite.center_x = self.screen_x + self.proj_width / 2
+        self.sprite.center_y = self.screen_y + self.proj_height / 2
+        self.sprite.width = self.proj_width
+        self.sprite.height = self.proj_height
+        self.sprite.visible = True
+
+        if (self.screen_x < self.game.player.aim_x < self.screen_x + self.proj_width and
+                self.screen_y < self.game.player.aim_y < self.screen_y + self.proj_height * 0.8):
+            return 'bodyshot'
+
+        if (self.screen_x + self.proj_width * 0.3 < self.game.player.aim_x <
+                self.screen_x + self.proj_width * 0.3 + self.proj_width * 0.4 and
+                self.screen_y + self.proj_height * 0.8 < self.game.player.aim_y <
+                self.screen_y + self.proj_height * 0.8 + self.proj_height // 5):
+            return 'headshot'
+
+    def get_damage(self, damage, part):
+        self.health -= damage if self.enemy_type != 'b' else -damage
+        if self.enemy_type == 'b' and self.game.current_stage == 1:
+            if self.health > 200 and (700, 700) in self.game.block_map:
+                self.game.block_map.remove((700, 700))
+
+        self.is_hit = True
+        self.hit_timer = 0
+
+        if part in self.dict_textures:
+            self.current_texture_name = part
+
+        if self.health <= 0:
+            self.die()
+            return
+
+        self.chasing = False
+        self.is_moving = False
+        self.target_cell = None
+
+    def attack_player(self):
+        self.is_attacking = True
+        self.attack_animation_timer = 0
+        self.attack_timer = self.attack_cooldown
+        self.current_texture_name = 'shoot'
+        self.chasing = False
+        self.is_moving = False
+        self.target_cell = None
+        self.velocity_x = 0
+        self.velocity_y = 0
+
+        self.game.player.get_damage(self, self.attack_damage)
+        self.attack_sound.play()
+
+    def die(self):
+        if self.respawn_after_die:
+            self.game.add_random_enemy()
+        self.is_dead = True
+        self.death_timer = 0
+        self.current_texture_name = 'death'
+        self.chasing = False
+        self.is_moving = False
+        self.target_cell = None
+        self.velocity_x = 0
+        self.velocity_y = 0
+        self.is_attacking = False
 
     def can_move_to(self, x, y):
         for i in range(8):
-            angle = 2 * pi * i / 8
-            check_x = x + self.sprite_radius * cos(angle)
-            check_y = y + self.sprite_radius * sin(angle)
+            check_x = x + self.sprite_radius * cos(2 * pi * i / 8)
+            check_y = y + self.sprite_radius * sin(2 * pi * i / 8)
 
             map_x = check_x // block_size * block_size
             map_y = check_y // block_size * block_size
@@ -419,9 +576,8 @@ class Enemies:
             if other_enemy != self:
                 dx = x - other_enemy.x
                 dy = y - other_enemy.y
-                distance = sqrt(dx * dx + dy * dy)
 
-                if distance < self.sprite_radius * 2:
+                if sqrt(dx * dx + dy * dy) < self.sprite_radius * 2:
                     return False
 
         return True
@@ -468,48 +624,8 @@ class Enemies:
 
         return float('inf')
 
-    def get_sprite_distance_for_ray(self, ray_idx, ray_angle):
-        dx = self.x - self.game.player.x
-        dy = self.y - self.game.player.y
-
-        center_dist = sqrt(dx * dx + dy * dy)
-        sprite_angle = atan2(dy, dx)
-        angle_diff = sprite_angle - ray_angle
-
-        return center_dist * cos(angle_diff)
 
     def draw(self):
-        if not self.visible:
-            return
+        # if self.visible:
+        self.sprite_list.draw()
 
-        arcade.draw_texture_rect(
-            self.current_texture,
-            arcade.LBWH(
-                self.screen_x,
-                self.screen_y,
-                self.proj_width,
-                self.proj_height
-            )
-        )
-        arcade.draw_rect_outline(arcade.rect.LBWH(
-            self.screen_x,
-            self.screen_y,
-            self.proj_width,
-            self.proj_height * 0.8
-        ), (255, 0, 0))
-
-        arcade.draw_rect_outline(arcade.rect.LBWH(
-            self.screen_x + self.proj_width * 0.3,
-            self.screen_y + self.proj_height * 0.8,
-            self.proj_width * 0.4,
-            self.proj_height // 5
-        ), (255, 0, 0))
-
-        if (self.screen_x < self.game.player.aim_x < self.screen_x + self.proj_width and
-                self.screen_y < self.game.player.aim_y < self.screen_y + self.proj_height * 0.8):
-            print('тело')
-
-        if (
-                self.screen_x + self.proj_width * 0.3 < self.game.player.aim_x < self.screen_x + self.proj_width * 0.3 + self.proj_width * 0.4 and
-                self.screen_y + self.proj_height * 0.8 < self.game.player.aim_y < self.screen_y + self.proj_height * 0.8 + self.proj_height // 5):
-            print('голова')

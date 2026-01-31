@@ -1,8 +1,5 @@
-from main import *
-from enemy import *
-from typing import List, Tuple, Dict, Set
+from typing import List, Tuple, Dict
 from collections import deque
-from functools import lru_cache
 
 class PathFinding:
     def __init__(self, game):
@@ -25,7 +22,6 @@ class PathFinding:
                                 neighbors.append((nx, ny))
                     self.graph[(x, y)] = neighbors
 
-    @lru_cache()
     def get_path(self, start: Tuple[int, int], goal: Tuple[int, int]) -> Tuple[int, int]:
         if start == goal:
             return goal
@@ -54,11 +50,11 @@ class PathFinding:
             if current == goal:
                 break
 
-            for neighbor in self.graph.get(current, []):
-                if neighbor not in visited:
-                    if self.is_valid_move(current, neighbor):
-                        queue.append(neighbor)
-                        visited[neighbor] = current
+            for neighbr in self.graph.get(current, []):
+                if neighbr not in visited:
+                    if self.is_valid_move(current, neighbr):
+                        queue.append(neighbr)
+                        visited[neighbr] = current
 
         return visited
 
@@ -97,19 +93,7 @@ class PathFinding:
             for dy in range(-radius, radius + 1):
                 for dx in range(-radius, radius + 1):
                     nx, ny = x + dx, y + dy
-                    if (0 <= ny < len(self.map) and 0 <= nx < len(self.map[0])):
+                    if 0 <= ny < len(self.map) and 0 <= nx < len(self.map[0]):
                         if self.map[ny][nx] != 'W':
-                            return (nx, ny)
+                            return nx, ny
         return None
-
-    # def get_direction_to_cell(self, from_pos, to_cell):
-    #     target_x = to_cell[0] * block_size + block_size // 2
-    #     target_y = to_cell[1] * block_size + block_size // 2
-    #
-    #     dx = target_x - from_pos[0]
-    #     dy = target_y - from_pos[1]
-    #
-    #     distance = sqrt(dx * dx + dy * dy)
-    #     if distance > 0:
-    #         return dx / distance, dy / distance
-    #     return 0, 0
