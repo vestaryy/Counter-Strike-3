@@ -97,7 +97,8 @@ class NewGamePreview(arcade.View):
     def on_key_press(self, symbol: int, modifiers: int) -> bool | None:
         if symbol == arcade.key.SPACE:
             self.current_slide = self.background_slide
-            arcade.stop_sound(self.player)
+            if hasattr(self, 'player'):
+                arcade.stop_sound(self.player)
             self.start_game = True
             from src.views.stage1 import Stage1
             game_view = Stage1()
